@@ -1,0 +1,101 @@
+// Nowify LMS - Prisma schema (from project document Section 3.6)
+// Database: MySQL (XAMPP)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Student {
+  id              Int       @id @default(autoincrement())
+  universityId    String    @unique @map("university_id") // University ID used for login
+  name            String
+  email           String    @unique
+  passwordHash    String    @map("password_hash")
+  major           String
+  phone           String?
+  campus          String?
+  academicStatus  String    @default("Active") @map("academic_status")
+  degree          String    @default("Bachelor")
+  dataConsentAt   DateTime? @map("data_consent_at") // Permission for analytics
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  courses     Course[]
+  lmsActivity LmsActivity?
+  tasks       Task[]
+
+  @@map("students")
+}
+
+model Course {
+  id                Int       @id @default(autoincrement())
+  studentId         Int       @map("student_id")
+  courseName        String    @map("course_name")
+  enrolledAt        DateTime? @map("enrolled_at")        // when student enrolled (for late_registration_score)
+  courseStartDate   DateTime? @map("course_start_date")  // course/semester start (for late_registration_score)
+
+  student     Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  assignments Assignment[]
+  exams       Exam[]
+  tasks       Task[]
+
+  @@map("courses")
+}
+
+model Assignment {
+  id              Int       @id @default(autoincrement())
+  courseId        Int       @map("course_id")
+  assignmentTitle String    @map("assignment_title")
+  dueDate         DateTime  @map("due_date")
+  submissionDate  DateTime? @map("submission_date")
+  status          String    // Completed | Pending | Late
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@map("assignments")
+}
+
+model Exam {
+  id              Int       @id @default(autoincrement())
+  courseId        Int       @map("course_id")
+  examTitle       String    @map("exam_title")
+  examDate        DateTime  @map("exam_date")
+  submissionDate  DateTime? @map("submission_date")
+  status          String    // Completed | Pending | Missed
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@map("exams")
+}
+
+model LmsActivity {
+  id             Int       @id @default(autoincrement())
+  studentId      Int       @unique @map("student_id")
+  loginCount     Int       @default(0) @map("login_count")
+  lastLoginDate  DateTime? @map("last_login_date")
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@map("lms_activities")
+}
+
+model Task {
+  id        Int      @id @default(autoincrement())
+  studentId Int      @map("student_id")
+  courseId  Int?     @map("course_id") // optional FK to Course (3NF: derive course name via join)
+  taskTitle String   @map("task_title")
+  startDate DateTime @map("start_date")
+  endDate   DateTime @map("end_date")
+  dueTime   String?  @map("due_time") // optional time
+  status    String   // To-Do | In Progress | In Review | Done
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  course  Course? @relation(fields: [courseId], references: [id], onDelete: SetNull)
+
+  @@map("tasks")
+}

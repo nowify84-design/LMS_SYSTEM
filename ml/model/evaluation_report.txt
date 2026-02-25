@@ -1,0 +1,27 @@
+Procrastination model – evaluation (test set, 80/20 split)
+============================================================
+
+Logistic Regression
+  Accuracy:  0.6873
+  Precision: 0.6492
+  Recall:    0.5766
+  F1:        0.6107
+  Confusion matrix (TN FP / FN TP): [[2545, 763], [1037, 1412]]
+
+Random Forest
+  Accuracy:  0.7843
+  Precision: 0.7759
+  Recall:    0.6929
+  F1:        0.7321
+  Confusion matrix (TN FP / FN TP): [[2818, 490], [752, 1697]]
+
+XGBoost
+  Accuracy:  0.7976
+  Precision: 0.8081
+  Recall:    0.6876
+  F1:        0.7430
+  Confusion matrix (TN FP / FN TP): [[2908, 400], [765, 1684]]
+
+============================================================
+Best model (by F1): XGBoost
+Features: 10

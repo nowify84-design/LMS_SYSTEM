@@ -1,0 +1,34 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Nowify – KKU theme (Tailwind theme in tailwind.config.js; CSS vars for compatibility) */
+:root {
+  --nowify-primary: #427E59;
+  --nowify-primary-dark: #35634a;
+  --nowify-primary-light: #5a9d76;
+  --nowify-success: #427E59;
+  --nowify-warning: #c9a227;
+  --nowify-danger: #b53d3d;
+  --nowify-neutral: #5a6c5d;
+  --nowify-bg: #f4f7f5;
+  --nowify-card: #ffffff;
+  --nowify-border: #e2e8e4;
+  --nowify-text: #1a2e22;
+  --nowify-muted: #6b7c72;
+  --nowify-avatar-bg: #e8ece9;
+  --nowify-upcoming-bg: #f5eef8;
+  --nowify-message-bg: #d4e5da;
+  --nowify-form-panel: #f8faf8;
+  --nowify-card-header: #8b9d94;
+  --nowify-accent: #60a5fa;
+  --nowify-accent-light: #dbeafe;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--nowify-text);
+  background-color: var(--nowify-bg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}

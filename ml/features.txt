@@ -1,0 +1,10 @@
+early_login_count
+early_login_consistency
+early_clicks
+early_clicks_per_login
+unique_resources_early
+num_of_prev_attempts
+late_registration_score
+workload_level
+assignments_count
+courses_count

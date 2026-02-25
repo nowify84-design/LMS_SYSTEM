@@ -1,0 +1,65 @@
+# dependencies
+node_modules
+.pnp
+.pnp.js
+
+# testing
+coverage
+
+# next.js
+.next/
+out/
+
+# production
+build
+dist
+
+# misc
+docs
+docs/
+project_document_( INTELLIGENT SYSTEM FOR STUDYING THE EFFECT OF PROCRASTINATION ON ACADEMIC PERFORMANCE ) (2).pdf
+واجهات المستخدم.pdf
+.DS_Store
+*.pem
+.env
+.env*.local
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# prisma
+prisma/migrations/**/migration_lock.toml
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Cursor IDE
+.cursor/
+.cursorignore
+*.cursor
+.cursorrules
+.cursorrules.md
+.cursorrules.txt
+.cursorrules.yml
+.cursorrules.yaml
+.cursorrules.yml
+
+# Python / ML
+__pycache__
+*.pyc
+.venv
+venv
+ml/dataset/
+ml/model/*.joblib
+!ml/model/.gitkeep
+.ipynb_checkpoints
+*.ipynb_checkpoints
