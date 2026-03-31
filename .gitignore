@@ -59,7 +59,6 @@ __pycache__
 .venv
 venv
 ml/dataset/
-ml/model/*.joblib
 !ml/model/.gitkeep
 .ipynb_checkpoints
 *.ipynb_checkpoints
