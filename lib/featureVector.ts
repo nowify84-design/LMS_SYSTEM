@@ -1,22 +1,19 @@
 /**
- * Build feature vector for ML prediction. Align with ml/features.txt and ml/api/app.py FEATURE_ORDER.
- * Features: early engagement signals only (no delay indicators) to avoid data leakage.
+ * Build 8-feature vector for ML prediction - FIXED TYPES.
+ * Aligned with XGBoost model top importances from notebook.
  */
 
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, Student } from "@prisma/client";
 
-/** Must match ml/api/app.py FEATURE_ORDER and ml/features.txt (order matters for API). */
 export const FEATURE_KEYS = [
-  "early_login_count",
-  "early_login_consistency",
-  "early_clicks",
-  "early_clicks_per_login",
-  "unique_resources_early",
-  "num_of_prev_attempts",
-  "late_registration_score",
-  "workload_level",
+  "previous_delays_count",
   "assignments_count",
+  "activity_count_in_enrolled_courses",
   "courses_count",
+  "workload_level",
+  "non_submission_count",
+  "last7d_engagement",
+  "course_engagement",
 ] as const;
 
 export type FeatureVector = {
@@ -24,94 +21,105 @@ export type FeatureVector = {
 };
 
 export function defaultFeatureVector(): FeatureVector {
-  return {
-    early_login_count: 0,
-    early_login_consistency: 0,
-    early_clicks: 0,
-    early_clicks_per_login: 0,
-    unique_resources_early: 0,
-    num_of_prev_attempts: 0,
-    late_registration_score: 0,
-    workload_level: 0,
-    assignments_count: 0,
-    courses_count: 0,
-  };
+  return Object.fromEntries(FEATURE_KEYS.map(k => [k, 0])) as FeatureVector;
 }
+
+type StudentWithData = Prisma.StudentGetPayload<{
+  include: {
+    courses: {
+      include: {
+        assignments: true;
+        exams: true;
+        lmsResources: true;
+      };
+    };
+    dailyActivities: true;
+    tasks: true;
+  };
+}>;
 
 export async function buildFeatureVector(
-  prisma: PrismaClient,
+  prisma: Prisma.PrismaClient,
   studentId: number
 ): Promise<FeatureVector> {
-  const [student] = await Promise.all([
-    prisma.student.findUnique({
-      where: { id: studentId },
-      include: {
-        courses: { include: { assignments: true, exams: true } },
-        lmsActivity: true,
+  const now = new Date();
+
+  const data: StudentWithData | null = await prisma.student.findUnique({
+    where: { id: studentId },
+    include: {
+      courses: {
+        include: {
+          assignments: true,
+          exams: true,
+          lmsResources: true,
+        },
+        orderBy: { courseStartDate: 'asc' },
       },
-    }),
-  ]);
+      dailyActivities: true,
+      tasks: true,
+    },
+  });
 
-  if (!student) return defaultFeatureVector();
+  if (!data) return defaultFeatureVector();
 
-  const courses = student.courses;
-  const lms = student.lmsActivity;
-  const totalAssignments = courses.reduce((s, c) => s + c.assignments.length, 0);
-  const pendingExams = courses.reduce(
-    (s, c) => s + c.exams.filter((e: { status: string }) => e.status === "Pending").length,
-    0
-  );
+  const { courses, tasks, dailyActivities } = data;
+  const allAssignments = courses.flatMap(c => [...(c.assignments as any[]), ...(c.exams as any[])]);
+  const assignmentsCount = allAssignments.length;
+  const coursesCount = courses.length;
 
-  const early_login_count = lms?.loginCount ?? 0;
-  const early_login_consistency =
-    early_login_count > 10 ? 0.8 : early_login_count > 5 ? 0.5 : early_login_count > 0 ? 0.2 : 0;
-  const early_clicks = 0; // project has no VLE click data
-  const early_clicks_per_login = early_login_count > 0 ? 0 : 0; // no clicks data
-  const unique_resources_early = 0; // project has no per-resource VLE data
-  const num_of_prev_attempts = 0; // project schema has no prev attempts
-
-  const workload_level = Math.min(
-    1,
-    (totalAssignments + pendingExams) / 20
-  );
-
-  let late_registration_score = 0;
-  const regScores: number[] = [];
-  for (const c of courses) {
-    const enrolledAt = (c as { enrolledAt?: Date; courseStartDate?: Date }).enrolledAt;
-    const courseStartDate = (c as { enrolledAt?: Date; courseStartDate?: Date }).courseStartDate;
-    if (enrolledAt && courseStartDate) {
-      const daysOffset =
-        (enrolledAt.getTime() - courseStartDate.getTime()) /
-        (24 * 60 * 60 * 1000);
-      regScores.push(Math.min(1, Math.max(0, (daysOffset + 30) / 60)));
-    }
+  // 1. previous_delays_count
+  let previous_delays_count = 0;
+  let cumLates = 0;
+  for (const course of courses) {
+    const courseLates = (course.assignments as any[]).filter((a: any) => a.status === 'Late' || (a.submissionDate && a.submissionDate > a.dueDate)).length +
+      (course.exams as any[]).filter((e: any) => e.status === 'Late' || (e.submissionDate && e.submissionDate > e.examDate)).length;
+    previous_delays_count += cumLates;
+    cumLates += courseLates;
   }
-  if (regScores.length > 0) {
-    late_registration_score =
-      regScores.reduce((a, b) => a + b, 0) / regScores.length;
-  }
+
+  // 2. activity_count_in_enrolled_courses
+  const activity_count_in_enrolled_courses = courses.reduce((sum, c) => sum + ((c.lmsResources as any[])?.length ?? 20), 0);
+
+  // 3. workload_level
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const upcomingAss = allAssignments.filter((a: any) => a.dueDate > thirtyDaysAgo && a.dueDate <= now).length;
+  const workload_level = Math.min(1.5, upcomingAss / 15 + tasks.length / 100);
+
+  // 4. non_submission_count
+  const non_submission_count = allAssignments.filter((a: any) => 
+    a.dueDate < now && a.status === 'Pending' && (a.type === 'TMA' || a.type === 'CMA')
+  ).length;
+
+  // 5-6. Engagement
+  const coursePeriod = courses.flatMap(c => (c.assignments as any[]).map((a: any) => a.dueDate)).sort((a, b) => a.getTime() - b.getTime())[0];
+  const courseStart = coursePeriod ? new Date(coursePeriod.getTime() - 90 * 24 * 60 * 60 * 1000) : new Date(1970, 0, 1);
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+  const courseActs = dailyActivities.filter((d: any) => d.activityDate >= courseStart && d.activityDate <= now);
+  const courseLogins = courseActs.length;
+  const courseClicks = courseActs.reduce((sum: number, d: any) => sum + d.clicks, 0);
+  const course_engagement = Math.sqrt(Math.max(0, courseLogins) * Math.max(0, courseClicks));
+
+  const last7Acts = dailyActivities.filter((d: any) => d.activityDate >= sevenDaysAgo);
+  const last7Logins = last7Acts.length;
+  const last7Clicks = last7Acts.reduce((sum: number, d: any) => sum + d.clicks, 0);
+  const last7d_engagement = Math.sqrt(Math.max(0, last7Logins) * Math.max(0, last7Clicks));
 
   return {
-    early_login_count,
-    early_login_consistency,
-    early_clicks,
-    early_clicks_per_login,
-    unique_resources_early,
-    num_of_prev_attempts,
-    late_registration_score,
+    previous_delays_count,
+    assignments_count: assignmentsCount,
+    activity_count_in_enrolled_courses,
+    courses_count: coursesCount,
     workload_level,
-    assignments_count: totalAssignments,
-    courses_count: courses.length,
+    non_submission_count,
+    last7d_engagement,
+    course_engagement,
   };
 }
 
-/** Build JSON payload for /predict: same keys as FEATURE_KEYS, all numeric (no NaN/undefined). */
 export function featureVectorToPayload(vec: FeatureVector): Record<string, number> {
-  const payload: Record<string, number> = {};
-  for (const k of FEATURE_KEYS) {
-    const v = vec[k];
-    payload[k] = typeof v === "number" && Number.isFinite(v) ? v : 0;
-  }
-  return payload;
+  return Object.fromEntries(
+    FEATURE_KEYS.map(k => [k, Number.isFinite(vec[k as keyof FeatureVector]) ? vec[k as keyof FeatureVector] : 0])
+  ) as Record<string, number>;
 }
+

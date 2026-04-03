@@ -43,6 +43,7 @@ prisma/migrations/**/migration_lock.toml
 *.swo
 
 # Cursor IDE
+TODO.md
 .cursor/
 .cursorignore
 *.cursor

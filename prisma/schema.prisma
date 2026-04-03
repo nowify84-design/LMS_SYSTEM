@@ -11,38 +11,40 @@ datasource db {
 }
 
 model Student {
-  id              Int       @id @default(autoincrement())
-  universityId    String    @unique @map("university_id") // University ID used for login
-  name            String
-  email           String    @unique
-  passwordHash    String    @map("password_hash")
-  major           String
-  phone           String?
-  campus          String?
-  academicStatus  String    @default("Active") @map("academic_status")
-  degree          String    @default("Bachelor")
-  dataConsentAt   DateTime? @map("data_consent_at") // Permission for analytics
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  id             Int       @id @default(autoincrement())
+  universityId   String    @unique @map("university_id") // University ID used for login
+  name           String
+  email          String    @unique
+  passwordHash   String    @map("password_hash")
+  major          String
+  phone          String?
+  campus         String?
+  academicStatus String    @default("Active") @map("academic_status")
+  degree         String    @default("Bachelor")
+  dataConsentAt  DateTime? @map("data_consent_at") // Permission for analytics
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
-  courses     Course[]
-  lmsActivity LmsActivity?
-  tasks       Task[]
+  courses         Course[]
+  lmsActivity     LmsActivity?
+  tasks           Task[]
+  dailyActivities LmsActivityDaily[] @relation("DailyActivity")
 
   @@map("students")
 }
 
 model Course {
-  id                Int       @id @default(autoincrement())
-  studentId         Int       @map("student_id")
-  courseName        String    @map("course_name")
-  enrolledAt        DateTime? @map("enrolled_at")        // when student enrolled (for late_registration_score)
-  courseStartDate   DateTime? @map("course_start_date")  // course/semester start (for late_registration_score)
+  id              Int       @id @default(autoincrement())
+  studentId       Int       @map("student_id")
+  courseName      String    @map("course_name")
+  enrolledAt      DateTime? @map("enrolled_at") // when student enrolled (for late_registration_score)
+  courseStartDate DateTime? @map("course_start_date") // course/semester start (for late_registration_score)
 
-  student     Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  assignments Assignment[]
-  exams       Exam[]
-  tasks       Task[]
+  student      Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  assignments  Assignment[]
+  exams        Exam[]
+  tasks        Task[]
+  lmsResources LmsResource[]
 
   @@map("courses")
 }
@@ -50,10 +52,11 @@ model Course {
 model Assignment {
   id              Int       @id @default(autoincrement())
   courseId        Int       @map("course_id")
+  type            String? // TMA, CMA, Exam
   assignmentTitle String    @map("assignment_title")
   dueDate         DateTime  @map("due_date")
   submissionDate  DateTime? @map("submission_date")
-  status          String    // Completed | Pending | Late
+  status          String // Completed | Pending | Late
 
   course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
 
@@ -61,27 +64,54 @@ model Assignment {
 }
 
 model Exam {
-  id              Int       @id @default(autoincrement())
-  courseId        Int       @map("course_id")
-  examTitle       String    @map("exam_title")
-  examDate        DateTime  @map("exam_date")
-  submissionDate  DateTime? @map("submission_date")
-  status          String    // Completed | Pending | Missed
+  id             Int       @id @default(autoincrement())
+  courseId       Int       @map("course_id")
+  type           String? // Exam
+  examTitle      String    @map("exam_title")
+  examDate       DateTime  @map("exam_date")
+  submissionDate DateTime? @map("submission_date")
+  status         String // Completed | Pending | Missed
 
   course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
 
   @@map("exams")
 }
 
-model LmsActivity {
-  id             Int       @id @default(autoincrement())
-  studentId      Int       @unique @map("student_id")
-  loginCount     Int       @default(0) @map("login_count")
-  lastLoginDate  DateTime? @map("last_login_date")
+model LmsActivityDaily {
+  id           Int      @id @default(autoincrement())
+  studentId    Int
+  activityDate DateTime @map("activity_date")
+  clicks       Int      @default(0)
+  uniqueSites  Int      @default(0) @map("unique_sites")
 
-  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  student       Student      @relation(fields: [studentId], references: [id], onDelete: Cascade, name: "DailyActivity")
+  LmsActivity   LmsActivity? @relation(fields: [lmsActivityId], references: [id])
+  lmsActivityId Int?
+
+  @@unique([studentId, activityDate])
+  @@map("lms_activity_daily")
+}
+
+model LmsActivity {
+  id            Int       @id @default(autoincrement())
+  studentId     Int       @unique @map("student_id")
+  loginCount    Int       @default(0) @map("login_count")
+  lastLoginDate DateTime? @map("last_login_date")
+
+  student       Student            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  dailyActivity LmsActivityDaily[]
 
   @@map("lms_activities")
+}
+
+model LmsResource {
+  id       Int     @id @default(autoincrement())
+  courseId Int
+  title    String?
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@map("lms_resources")
 }
 
 model Task {
@@ -92,7 +122,7 @@ model Task {
   startDate DateTime @map("start_date")
   endDate   DateTime @map("end_date")
   dueTime   String?  @map("due_time") // optional time
-  status    String   // To-Do | In Progress | In Review | Done
+  status    String // To-Do | In Progress | In Review | Done
 
   student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
   course  Course? @relation(fields: [courseId], references: [id], onDelete: SetNull)

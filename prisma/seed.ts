@@ -209,13 +209,39 @@ async function main() {
       });
     }
 
-    await prisma.lmsActivity.create({
+    // Legacy aggregate + new daily activities
+    const lmsActId = await prisma.lmsActivity.create({
       data: {
         studentId: student.id,
         loginCount: 5 + (i % 20),
         lastLoginDate: addDays(DATE_REFERENCES.semesterStart, 30 + (i % 30)),
       },
-    });
+    }).then(res => res.id);
+
+    // Seed 20-30 days of LmsActivityDaily
+    for (let d = 0; d < 25 + (i % 10); d++) {
+      const actDate = addDays(DATE_REFERENCES.semesterStart, d + 5);
+      await prisma.lmsActivityDaily.create({
+        data: {
+          studentId: student.id,
+          activityDate: actDate,
+          clicks: 3 + (i % 5),
+          uniqueSites: 2 + (d % 3),
+        },
+      });
+    }
+
+    // Seed LmsResource (20 per course avg)
+    for (const course of await prisma.course.findMany({ where: { studentId: student.id } })) {
+      for (let r = 0; r < 15 + (i % 10); r++) {
+        await prisma.lmsResource.create({
+          data: {
+            courseId: course.id,
+            title: `Resource ${r + 1}`,
+          },
+        });
+      }
+    }
 
     const numTasks = i % 4;
     const statuses = ["To-Do", "In Progress", "In Review", "Done"];
