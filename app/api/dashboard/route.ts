@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { buildFeatureVector, featureVectorToPayload } from "@/lib/featureVector";
+import {
+  buildFeatureVector,
+  fallbackRiskScoreFromFeatures,
+  featureVectorToPayload,
+} from "@/lib/featureVector";
 import { getMessageForLevel, type PredictionLevel } from "@/lib/messageRules";
 
 const FLASK_API_URL = process.env.FLASK_API_URL || "http://127.0.0.1:5000";
@@ -17,7 +21,9 @@ export async function GET() {
     include: {
       courses: { include: { assignments: true, exams: true } },
       lmsActivity: true,
-      tasks: true,
+      tasks: {
+        include: { course: { select: { courseName: true } } },
+      },
     },
   });
   if (!student) {
@@ -34,18 +40,20 @@ export async function GET() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(featureVectorToPayload(featureVector)),
+      cache: "no-store",
     });
     if (res.ok) {
       const data = await res.json();
       level = data.level ?? level;
       percentage = typeof data.percentage === "number" ? data.percentage : percentage;
+    } else {
+      const score = fallbackRiskScoreFromFeatures(featureVector);
+      percentage = Math.round(Math.min(100, Math.max(0, score * 100)));
+      if (percentage >= 60) level = "High";
+      else if (percentage >= 30) level = "Medium";
     }
   } catch {
-    // Flask unreachable: use fallback from early signals
-    const score =
-      (1 - featureVector.early_login_consistency) * 0.4 +
-      featureVector.late_registration_score * 0.35 +
-      featureVector.workload_level * 0.25;
+    const score = fallbackRiskScoreFromFeatures(featureVector);
     percentage = Math.round(Math.min(100, Math.max(0, score * 100)));
     if (percentage >= 60) level = "High";
     else if (percentage >= 30) level = "Medium";
@@ -81,12 +89,14 @@ export async function GET() {
       id: t.id,
       title: t.taskTitle,
       endDate: t.endDate,
-      courseName: t.courseName,
+      courseName: t.course?.courseName ?? null,
     }));
 
   const coursesWithProgress = student.courses.map((c) => {
-    const total = c.totalAssignments + c.totalExams;
-    const completed = c.completedAssignments + c.completedExams;
+    const total = c.assignments.length + c.exams.length;
+    const completed =
+      c.assignments.filter((a) => a.status === "Completed").length +
+      c.exams.filter((e) => e.status === "Completed").length;
     const progress_pct = total > 0 ? Math.round((completed / total) * 100) : 0;
     return { courseName: c.courseName, progress_pct };
   });

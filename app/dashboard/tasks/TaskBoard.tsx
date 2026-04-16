@@ -15,6 +15,11 @@ type Task = {
 
 const STATUSES = ["To-Do", "In Progress", "In Review", "Done"];
 
+interface TaskBoardProps {
+  /** Server-loaded tasks (ISO date strings) for first paint; client refetches from API. */
+  initialTasks?: Task[];
+}
+
 function formatDue(endDate: string) {
   const end = new Date(endDate);
   const now = new Date();
@@ -26,10 +31,10 @@ function formatDue(endDate: string) {
   return `${Math.ceil(hours / 24)} days left`;
 }
 
-export default function TaskBoard() {
+export default function TaskBoard({ initialTasks }: TaskBoardProps) {
   const router = useRouter();
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [tasks, setTasks] = useState<Task[]>(() => initialTasks ?? []);
+  const [loading, setLoading] = useState(() => initialTasks === undefined);
 
   useEffect(() => {
     fetch("/api/tasks")

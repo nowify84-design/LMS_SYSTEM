@@ -1,0 +1,25 @@
+{
+  "name": "Nowify LMS",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-20-bookworm",
+  "forwardPorts": [3001, 5000, 3306],
+  "portsAttributes": {
+    "3001": {
+      "label": "Next.js (npm run dev)"
+    },
+    "5000": {
+      "label": "Flask ML API (optional)"
+    },
+    "3306": {
+      "label": "MySQL (host or tunnel — not started by default)"
+    }
+  },
+  "postCreateCommand": "npm install && npx prisma generate",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "Prisma.prisma"
+      ]
+    }
+  }
+}

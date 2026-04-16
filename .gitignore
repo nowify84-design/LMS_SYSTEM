@@ -44,6 +44,8 @@ prisma/migrations/**/migration_lock.toml
 
 # Cursor IDE
 TODO.md
+CHAPTER 5.md
+blackbox_mcp_settings.json
 .cursor/
 .cursorignore
 *.cursor

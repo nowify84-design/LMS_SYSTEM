@@ -47,13 +47,7 @@ export default function LoginPage() {
         setLoading(false);
         return;
       }
-      const me = await fetch("/api/auth/me");
-      const meData = await me.json();
-      if (meData.dataConsentAt) {
-        router.push("/dashboard");
-      } else {
-        router.push("/consent");
-      }
+      router.push("/lms");
       router.refresh();
     } catch {
       setError("Network error");
@@ -141,12 +135,12 @@ export default function LoginPage() {
               <Link href="/" className="text-nowify-primary hover:underline">
                 ← Back to home
               </Link>
-              </p>
+            </p>
           </div>
         </div>
-        
+
       </div>
-     
+
     </div>
   );
 }

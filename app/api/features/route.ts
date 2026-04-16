@@ -2,7 +2,7 @@
  * GET /api/features
  * Returns the ML feature vector for the authenticated student.
  * Features are computed from database (assignments, exams, courses, tasks, lms_activity).
- * Aligns with ml/features.txt and Flask /predict endpoint.
+ * Aligns with ml/features.txt, lib/featureVector.ts FEATURE_KEYS, and Flask POST /predict.
  */
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";

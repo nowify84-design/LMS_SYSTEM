@@ -39,6 +39,7 @@ export default async function CalendarPage() {
     course?: string | null;
     start: Date;
     end: Date;
+    status: string;
   }[] = [];
 
   assignments.forEach((a) => {
@@ -54,6 +55,7 @@ export default async function CalendarPage() {
       course: a.course.courseName,
       start,
       end,
+      status: a.status,
     });
   });
   exams.forEach((e) => {
@@ -69,12 +71,13 @@ export default async function CalendarPage() {
       course: e.course.courseName,
       start,
       end,
+      status: e.status,
     });
   });
   const courseById = new Map(courses.map((c) => [c.id, c.courseName]));
   tasks.forEach((t) => {
-    const taskWithCourseId = t as { courseId?: number | null };
-    const courseName = taskWithCourseId.courseId != null ? courseById.get(taskWithCourseId.courseId) ?? null : null;
+    const courseName =
+      t.courseId != null ? courseById.get(t.courseId) ?? null : null;
     items.push({
       date: new Date(t.endDate),
       title: t.taskTitle,
@@ -82,6 +85,7 @@ export default async function CalendarPage() {
       course: courseName,
       start: new Date(t.startDate),
       end: new Date(t.endDate),
+      status: t.status,
     });
   });
 
@@ -92,6 +96,7 @@ export default async function CalendarPage() {
     course: item.course ?? null,
     start: item.start.toISOString(),
     end: item.end.toISOString(),
+    status: item.status,
   }));
 
   return (
@@ -101,7 +106,8 @@ export default async function CalendarPage() {
       </h1>
       <CalendarView
         items={serializedItems}
-        initialMonthISO={new Date(thisYear, thisMonth, 1).toISOString()}
+        initialYear={thisYear}
+        initialMonthIndex={thisMonth}
       />
       <div className="mt-6 rounded-2xl border-2 border-nowify-border bg-nowify-card shadow-md overflow-hidden">
         <div className="px-4 py-3 border-b border-nowify-border bg-nowify-bg rounded-t-2xl">

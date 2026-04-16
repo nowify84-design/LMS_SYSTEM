@@ -1,18 +1,14 @@
 import Link from "next/link";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { buildFeatureVector, featureVectorToPayload, type FeatureVector } from "@/lib/featureVector";
+import {
+  buildFeatureVector,
+  fallbackRiskScoreFromFeatures,
+  featureVectorToPayload,
+} from "@/lib/featureVector";
 import { getMessageLines, type PredictionLevel } from "@/lib/messageRules";
 
 const FLASK_API_URL = process.env.FLASK_API_URL || "http://127.0.0.1:5000";
-
-function fallbackRiskScore(v: FeatureVector): number {
-  return (
-    (1 - v.early_login_consistency) * 0.4 +
-    v.late_registration_score * 0.35 +
-    v.workload_level * 0.25
-  );
-}
 
 async function getDashboardData(studentId: number) {
   const [student, courses, assignments, exams, tasks] = await Promise.all([
@@ -54,13 +50,13 @@ async function getDashboardData(studentId: number) {
       level = data.level ?? level;
       percentage = typeof data.percentage === "number" ? data.percentage : percentage;
     } else {
-      const score = fallbackRiskScore(featureVector);
+      const score = fallbackRiskScoreFromFeatures(featureVector);
       percentage = Math.round(Math.min(100, Math.max(0, score * 100)));
       if (percentage >= 60) level = "High";
       else if (percentage >= 30) level = "Medium";
     }
   } catch {
-    const score = fallbackRiskScore(featureVector);
+    const score = fallbackRiskScoreFromFeatures(featureVector);
     percentage = Math.round(Math.min(100, Math.max(0, score * 100)));
     if (percentage >= 60) level = "High";
     else if (percentage >= 30) level = "Medium";
@@ -90,7 +86,12 @@ async function getDashboardData(studentId: number) {
     return { courseName: c.courseName, progress_pct: total > 0 ? Math.round((completed / total) * 100) : 0 };
   });
 
-  const dueDatesSet = new Set(upcoming.map((u) => u.due.getDate()));
+  const dueDatesSet = new Set(
+    upcoming.map((u) => {
+      const d = u.due;
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    })
+  );
 
   return {
     student,
@@ -117,7 +118,7 @@ function formatDue(d: Date): { text: string; urgent: boolean } {
 
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-function MiniCalendar({ dueDatesSet }: { dueDatesSet: Set<number> }) {
+function MiniCalendar({ dueDatesSet }: { dueDatesSet: Set<string> }) {
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth();
@@ -141,6 +142,8 @@ function MiniCalendar({ dueDatesSet }: { dueDatesSet: Set<number> }) {
     weeks.push(week);
   }
   const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const dateKey = (d: number) =>
+    `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 
   return (
     <div className="p-4">
@@ -160,7 +163,7 @@ function MiniCalendar({ dueDatesSet }: { dueDatesSet: Set<number> }) {
             <div key={d} className="relative py-2">
               <span
                 className={
-                  dueDatesSet.has(d)
+                  dueDatesSet.has(dateKey(d))
                     ? "font-semibold text-nowify-primary"
                     : d === today
                       ? "font-bold text-nowify-primary bg-nowify-primary/10 rounded-full w-7 h-7 inline-flex items-center justify-center"
@@ -169,7 +172,7 @@ function MiniCalendar({ dueDatesSet }: { dueDatesSet: Set<number> }) {
               >
                 {d}
               </span>
-              {dueDatesSet.has(d) && d !== today && (
+              {dueDatesSet.has(dateKey(d)) && d !== today && (
                 <span className="absolute -top-0.5 left-1/2 -translate-x-1/2 text-nowify-danger text-[8px]" aria-hidden>
                   ◆
                 </span>

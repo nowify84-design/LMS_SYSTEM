@@ -18,12 +18,17 @@ export default function AddTaskForm({ courses }: { courses: Course[] }) {
     e.preventDefault();
     setLoading(true);
     try {
-      const d = date || new Date().toISOString().slice(0, 10);
+      const d = date;
       const [sh, sm] = timeStart.split(":").map(Number);
       const [eh, em] = timeFinish.split(":").map(Number);
       const [y, mo, day] = d.split("-").map(Number);
       const startDate = new Date(y, mo - 1, day, sh, sm, 0);
       const endDate = new Date(y, mo - 1, day, eh, em, 0);
+      if (endDate <= startDate) {
+        alert("Finish time must be after start time.");
+        setLoading(false);
+        return;
+      }
       const res = await fetch("/api/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -119,6 +124,7 @@ export default function AddTaskForm({ courses }: { courses: Course[] }) {
           value={date}
           onChange={(e) => setDate(e.target.value)}
           min={today}
+          required
         />
       </div>
       <div>

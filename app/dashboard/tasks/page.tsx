@@ -6,10 +6,28 @@ import AddTaskCard from "./AddTaskCard";
 export default async function TasksPage() {
   const studentId = await getSession();
   if (!studentId) return null;
-  const courses = await prisma.course.findMany({
-    where: { studentId },
-    select: { id: true, courseName: true },
-  });
+  
+  const [courses, tasks] = await Promise.all([
+    prisma.course.findMany({
+      where: { studentId },
+      select: { id: true, courseName: true },
+    }),
+    prisma.task.findMany({
+      where: { studentId },
+      include: { course: { select: { courseName: true } } },
+      orderBy: { endDate: "asc" },
+    }),
+  ]);
+
+  const boardTasks = tasks.map((t) => ({
+    id: t.id,
+    taskTitle: t.taskTitle,
+    startDate: t.startDate.toISOString(),
+    endDate: t.endDate.toISOString(),
+    dueTime: t.dueTime,
+    status: t.status,
+    course: t.course,
+  }));
 
   return (
     <>
@@ -17,7 +35,7 @@ export default async function TasksPage() {
       <div className="mb-6">
         <AddTaskCard courses={courses} />
       </div>
-      <TaskBoard />
+      <TaskBoard initialTasks={boardTasks} />
     </>
   );
 }

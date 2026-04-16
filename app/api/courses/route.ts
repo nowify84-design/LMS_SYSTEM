@@ -15,8 +15,10 @@ export async function GET() {
     },
   });
   const withProgress = courses.map((c) => {
-    const total = c.totalAssignments + c.totalExams;
-    const completed = c.completedAssignments + c.completedExams;
+    const total = c.assignments.length + c.exams.length;
+    const completed =
+      c.assignments.filter((a) => a.status === "Completed").length +
+      c.exams.filter((e) => e.status === "Completed").length;
     const progress_pct = total > 0 ? Math.round((completed / total) * 100) : 0;
     return { ...c, progress_pct };
   });

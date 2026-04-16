@@ -1,20 +1,88 @@
 /**
  * Nowify LMS – database seed.
  * Creates the database if it does not exist, then seeds.
- * Student list and university_id come only from Excel (date_references_seed.xlsx) student_id column.
- * Tasks, courses, assignments, and exams are generated in-code.
+ * Semester and assessment dates are defined only in this file (never read from a file).
+ * University IDs (login `universityId`) can come from:
+ *   - SEED_UNIVERSITY_IDS_FILE: UTF-8 text, one ID per line (# starts a comment), or
+ *   - SEED_STUDENT_IDS_EXCEL_PATH or prisma/date_references_seed.xlsx: first sheet,
+ *     column "student_id" / "Student ID" / first column — IDs only, no dates are read.
+ * If neither yields IDs, synthetic 400000001+ are used.
  */
 
 import { PrismaClient } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
-import * as XLSX from "xlsx";
+import * as fs from "fs";
 import * as path from "path";
+import * as XLSX from "xlsx";
 import * as mysql from "mysql2/promise";
 import { execSync } from "child_process";
 
 const prisma = new PrismaClient();
 
-const EXCEL_PATH = path.join(__dirname, "date_references_seed.xlsx");
+const DEFAULT_EXCEL_IDS_PATH = path.join(__dirname, "date_references_seed.xlsx");
+
+/** One university ID per line; empty lines and # comments skipped. */
+function readUniversityIdsFromTxt(filePath: string): string[] {
+  const raw = fs.readFileSync(filePath, "utf8");
+  return Array.from(
+    new Set(
+      raw
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line !== "" && !line.startsWith("#")),
+    ),
+  );
+}
+
+/**
+ * Reads student_id-style column from Excel. Only string IDs are used; workbook is
+ * not used for dates (see DATE_REFERENCES in this file).
+ */
+function readUniversityIdsFromExcel(filePath: string): string[] {
+  const workbook = XLSX.readFile(filePath);
+  const sheetName = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
+  if (rows.length === 0) return [];
+
+  const firstRow = rows[0];
+  const keys = Object.keys(firstRow);
+  const idKey =
+    keys.find((k) => /student_id|student id/i.test(k)) ?? keys[0];
+  return Array.from(
+    new Set(
+      rows
+        .map((r: Record<string, unknown>) => r[idKey])
+        .filter((v: unknown) => v != null && String(v).trim() !== "")
+        .map((v: unknown) => String(v).trim()),
+    ),
+  );
+}
+
+function getUniversityIdsFromFile(): { ids: string[]; source: string } {
+  const txtPath = process.env.SEED_UNIVERSITY_IDS_FILE?.trim();
+  if (txtPath) {
+    if (!fs.existsSync(txtPath)) {
+      console.warn(`SEED_UNIVERSITY_IDS_FILE not found: ${txtPath}`);
+      return { ids: [], source: "none" };
+    }
+    const ids = readUniversityIdsFromTxt(txtPath);
+    return { ids, source: `text (${txtPath})` };
+  }
+
+  const excelPath =
+    process.env.SEED_STUDENT_IDS_EXCEL_PATH?.trim() || DEFAULT_EXCEL_IDS_PATH;
+  if (!fs.existsSync(excelPath)) {
+    return { ids: [], source: "none" };
+  }
+  try {
+    const ids = readUniversityIdsFromExcel(excelPath);
+    return { ids, source: `Excel (${excelPath})` };
+  } catch (e) {
+    console.warn("Could not read university IDs from Excel:", (e as Error).message);
+    return { ids: [], source: "none" };
+  }
+}
 
 /** Create the database from DATABASE_URL if it does not exist. */
 async function ensureDatabaseExists(): Promise<void> {
@@ -58,36 +126,13 @@ function ensureMigrationsApplied(): void {
   }
 }
 
-/** Read student_id values from Excel (only source for student list / university_id); column may be "student_id", "Student ID", or first column. */
-function getStudentIdsFromExcel(): string[] {
-  try {
-    const workbook = XLSX.readFile(EXCEL_PATH);
-    const sheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
-    if (rows.length === 0) return [];
-
-    const firstRow = rows[0];
-    const keys = Object.keys(firstRow);
-    const idKey =
-      keys.find((k) => /student_id|student id/i.test(k)) ?? keys[0];
-    const ids = rows
-      .map((r: Record<string, unknown>) => r[idKey])
-      .filter((v: unknown) => v != null && String(v).trim() !== "")
-      .map((v: unknown) => String(v).trim());
-    return Array.from(new Set(ids));
-  } catch (e) {
-    console.warn("Could not read date_references_seed.xlsx, using default student IDs:", (e as Error).message);
-    return [];
-  }
-}
-
-// —— Date reference: align with date_references_seed.xlsx (2026) ——
+/**
+ * Academic calendar (code only). Assignment due dates are derived from each
+ * course start so TMAs stay ordered like a real LMS.
+ */
 const DATE_REFERENCES = {
   semesterStart: new Date("2026-02-01"),
   semesterEnd: new Date("2026-06-15"),
-  assignmentDueStart: new Date("2026-03-01"),
-  assignmentDueEnd: new Date("2026-05-20"),
   examWindowStart: new Date("2026-05-25"),
   examWindowEnd: new Date("2026-06-10"),
   taskStart: new Date("2026-02-10"),
@@ -99,14 +144,21 @@ const COURSE_NAMES = [
   "Database Systems",
   "Software Engineering",
   "Computer Networks",
-  "Systems Rules Management",
+  "Systems Requirements Management",
   "Data Structures",
   "Operating Systems",
   "Web Technologies",
 ];
 
 const CAMPUSES = ["Main", "Women's Campus", "Branch A"];
-const MAJORS = ["Computer Science", "Information Technology", "Software Engineering", "Data Science"];
+const MAJORS = [
+  "Computer Science",
+  "Information Technology",
+  "Software Engineering",
+  "Data Science",
+];
+
+const ASSIGNMENT_TYPES = ["TMA", "CMA", "TMA", "CMA"] as const;
 
 function addDays(d: Date, days: number): Date {
   const out = new Date(d);
@@ -119,6 +171,34 @@ function randomBetween(start: Date, end: Date): Date {
   return new Date(t);
 }
 
+/**
+ * LMS-style spaced due dates: week 2, 4, 6, 8 after course start, with a small
+ * per-course offset so rows differ but stay monotonic per course.
+ */
+function assignmentDueDate(
+  courseStartDate: Date,
+  assignmentIndex1Based: number,
+  courseIndex: number,
+): Date {
+  const week = assignmentIndex1Based * 2;
+  const baseDays = week * 7 + (courseIndex % 3) - 1;
+  const due = addDays(courseStartDate, Math.max(7, baseDays));
+  if (due.getTime() > DATE_REFERENCES.semesterEnd.getTime()) {
+    return new Date(DATE_REFERENCES.semesterEnd);
+  }
+  return due;
+}
+
+/** Final exam placed deterministically inside the exam window. */
+function finalExamDate(courseIndex: number, studentIndex: number): Date {
+  const span =
+    DATE_REFERENCES.examWindowEnd.getTime() -
+    DATE_REFERENCES.examWindowStart.getTime();
+  const step = span / 16;
+  const offset = (courseIndex * 3 + studentIndex * 2) % 12;
+  return new Date(DATE_REFERENCES.examWindowStart.getTime() + step * offset);
+}
+
 async function main() {
   await ensureDatabaseExists();
   ensureMigrationsApplied();
@@ -126,16 +206,18 @@ async function main() {
   await prisma.task.deleteMany();
   await prisma.assignment.deleteMany();
   await prisma.exam.deleteMany();
+  await prisma.lmsResource.deleteMany();
   await prisma.course.deleteMany();
+  await prisma.lmsActivityDaily.deleteMany();
   await prisma.lmsActivity.deleteMany();
   await prisma.student.deleteMany();
 
   const passwordHash = await bcrypt.hash("password123", 10);
 
-  const excelStudentIds = getStudentIdsFromExcel();
+  const { ids: fileIds, source: idSource } = getUniversityIdsFromFile();
   const studentIds =
-    excelStudentIds.length > 0
-      ? excelStudentIds
+    fileIds.length > 0
+      ? fileIds
       : Array.from({ length: 50 }, (_, i) => String(400000001 + i));
   const totalStudents = studentIds.length;
 
@@ -164,14 +246,13 @@ async function main() {
     for (let ci = 0; ci < chosen.length; ci++) {
       const courseName = chosen[ci];
       studentCourseNames.push(courseName);
-      // Vary completion per course so progress % differs (e.g. 20%, 40%, 60%, 80%, 100%)
-      const completedAssignmentsForCourse = 1 + (ci + i) % 4; // 1–4 completed per course
-      const examCompleted = (i + ci) % 3 === 0; // some courses have exam done
+      const completedAssignmentsForCourse = 1 + (ci + i) % 4;
+      const examCompleted = (i + ci) % 3 === 0;
       const courseStartDate = DATE_REFERENCES.semesterStart;
       const enrolledAt = addDays(
         courseStartDate,
-        -14 - (ci * 3) + (i % 5)
-      ); // mix of early (-14 to -9) and on-time (-6 to -1) enrollment
+        -14 - ci * 3 + (i % 5),
+      );
       const course = await prisma.course.create({
         data: {
           studentId: student.id,
@@ -182,14 +263,19 @@ async function main() {
       });
 
       for (let a = 1; a <= 4; a++) {
-        const dueDate = randomBetween(DATE_REFERENCES.assignmentDueStart, DATE_REFERENCES.assignmentDueEnd);
+        const dueDate = assignmentDueDate(courseStartDate, a, ci);
         const isCompleted = a <= completedAssignmentsForCourse;
         const isLate = !isCompleted && oneBased <= 10 && a === 3;
-        const submissionDate = isCompleted ? addDays(dueDate, -1) : isLate ? addDays(dueDate, 2) : null;
+        const submissionDate = isCompleted
+          ? addDays(dueDate, -1)
+          : isLate
+            ? addDays(dueDate, 2)
+            : null;
         await prisma.assignment.create({
           data: {
             courseId: course.id,
-            assignmentTitle: `Assignment ${a} – ${courseName}`,
+            type: ASSIGNMENT_TYPES[a - 1],
+            assignmentTitle: `${ASSIGNMENT_TYPES[a - 1]} ${a} – ${courseName}`,
             dueDate,
             submissionDate,
             status: isCompleted ? "Completed" : isLate ? "Late" : "Pending",
@@ -197,10 +283,11 @@ async function main() {
         });
       }
 
-      const examDate = randomBetween(DATE_REFERENCES.examWindowStart, DATE_REFERENCES.examWindowEnd);
+      const examDate = finalExamDate(ci, i);
       await prisma.exam.create({
         data: {
           courseId: course.id,
+          type: "Exam",
           examTitle: `Final Exam – ${courseName}`,
           examDate,
           submissionDate: examCompleted ? addDays(examDate, -1) : null,
@@ -209,16 +296,14 @@ async function main() {
       });
     }
 
-    // Legacy aggregate + new daily activities
-    const lmsActId = await prisma.lmsActivity.create({
+    await prisma.lmsActivity.create({
       data: {
         studentId: student.id,
         loginCount: 5 + (i % 20),
         lastLoginDate: addDays(DATE_REFERENCES.semesterStart, 30 + (i % 30)),
       },
-    }).then(res => res.id);
+    });
 
-    // Seed 20-30 days of LmsActivityDaily
     for (let d = 0; d < 25 + (i % 10); d++) {
       const actDate = addDays(DATE_REFERENCES.semesterStart, d + 5);
       await prisma.lmsActivityDaily.create({
@@ -231,8 +316,9 @@ async function main() {
       });
     }
 
-    // Seed LmsResource (20 per course avg)
-    for (const course of await prisma.course.findMany({ where: { studentId: student.id } })) {
+    for (const course of await prisma.course.findMany({
+      where: { studentId: student.id },
+    })) {
       for (let r = 0; r < 15 + (i % 10); r++) {
         await prisma.lmsResource.create({
           data: {
@@ -243,14 +329,16 @@ async function main() {
       }
     }
 
-    const numTasks = i % 4;
+    const numTasks = 1 + (i % 4);
     const statuses = ["To-Do", "In Progress", "In Review", "Done"];
     const firstCourseId =
       studentCourseNames.length > 0
-        ? (await prisma.course.findFirst({
-            where: { studentId: student.id, courseName: studentCourseNames[0] },
-            select: { id: true },
-          }))?.id ?? null
+        ? (
+            await prisma.course.findFirst({
+              where: { studentId: student.id, courseName: studentCourseNames[0] },
+              select: { id: true },
+            })
+          )?.id ?? null
         : null;
     for (let t = 0; t < numTasks; t++) {
       const startDate = randomBetween(DATE_REFERENCES.taskStart, DATE_REFERENCES.taskEnd);
@@ -269,8 +357,10 @@ async function main() {
     }
   }
 
-  console.log(`Seed completed: ${totalStudents} students (university_id from Excel student_id only).`);
-  console.log("Date reference used (align with date_references_seed.xlsx):", DATE_REFERENCES);
+  const idLabel =
+    fileIds.length > 0 ? `university_id from ${idSource}` : "synthetic university_id";
+  console.log(`Seed completed: ${totalStudents} students (${idLabel}).`);
+  console.log("Date reference (code only):", DATE_REFERENCES);
 }
 
 main()

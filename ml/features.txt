@@ -1,10 +1,8 @@
-early_login_count
-early_login_consistency
-early_clicks
-early_clicks_per_login
-unique_resources_early
-num_of_prev_attempts
-late_registration_score
-workload_level
+previous_delays_count
 assignments_count
+activity_count_in_enrolled_courses
 courses_count
+workload_level
+non_submission_count
+last7d_engagement
+course_engagement

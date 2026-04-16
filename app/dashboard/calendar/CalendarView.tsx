@@ -55,14 +55,19 @@ function sameDay(a: Date, b: Date): boolean {
 
 export default function CalendarView({
   items: serializedItems,
-  initialMonthISO,
+  initialYear,
+  initialMonthIndex,
 }: {
   items: SerializedCalendarItem[];
-  initialMonthISO: string;
+  /** Calendar month to show first (server “today” year, avoids UTC skew from ISO). */
+  initialYear: number;
+  /** 0–11, same as `Date.prototype.getMonth`. */
+  initialMonthIndex: number;
 }) {
   const items = useMemo(() => parseItems(serializedItems), [serializedItems]);
-  const initialMonth = useMemo(() => new Date(initialMonthISO), [initialMonthISO]);
-  const [viewMonth, setViewMonth] = useState(() => new Date(initialMonth.getFullYear(), initialMonth.getMonth(), 1));
+  const [viewMonth, setViewMonth] = useState(
+    () => new Date(initialYear, initialMonthIndex, 1),
+  );
   const [selectedWeekStart, setSelectedWeekStart] = useState<Date>(() => {
     const now = new Date();
     return getWeekStart(now);
@@ -87,7 +92,7 @@ export default function CalendarView({
       start.setHours(0, 0, 0, 0);
       end.setHours(0, 0, 0, 0);
       for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        set.add(`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`);
+        set.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
       }
     });
     return set;
@@ -198,7 +203,7 @@ export default function CalendarView({
                   selectedWeekStart.getTime() === weekStart.getTime();
                 const isToday = sameDay(cellDate, today);
                 const hasDeadline = datesWithDeadlines.has(
-                  `${year}-${month}-${d}`
+                  `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`
                 );
                 return (
                   <button
