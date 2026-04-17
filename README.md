@@ -88,7 +88,7 @@ The ML pipeline expects the **OULAD** (Open University Learning Analytics Datase
 After downloading, extract the CSV files (e.g. `studentInfo.csv`,
 `studentRegistration.csv`, `studentVle.csv`, `vle.csv`, `assessments.csv`,
 `courses.csv`, `studentAssessment.csv`) into `ml/dataset/`. Training and export
-scripts live in [`docs/feature_engineering_instructions.md`](docs/feature_engineering_instructions.md)
+scripts live in [`docs/03-ml-prediction.md`](docs/03-ml-prediction.md)
 and [`ml/notebooks/`](ml/notebooks/) — use them to build `ml/final_dataset.csv` and
 refresh `ml/model/procrastination_model.joblib` when you change the pipeline.
 
@@ -203,10 +203,19 @@ refresh `ml/model/procrastination_model.joblib` when you change the pipeline.
 
 ## Next steps
 
-See [TODO.md](TODO.md) for the working task list. Suggested checks after setup:
-`npm run lint`, `npm run build`, log in with a seeded `universityId` and
-`password123`, open `/dashboard` and `/dashboard/calendar`, and run the Flask
-smoke test when the ML API is enabled.
+- Verify the app builds cleanly: `npm run lint` then `npm run build`
+- Seed + login:
+  - Run `npm run db:seed`
+  - Login at `/login` with any seeded `universityId` and password **`password123`**
+- Walk the core UI:
+  - `/lms` → `/consent` (if consent not set) → `/dashboard`
+  - `/dashboard/calendar` (month + week views)
+  - `/dashboard/tasks` (create task, move status, delete)
+- Verify the ML integration (optional):
+  - Start Flask: `cd ml/api && pip install -r requirements.txt && python app.py`
+  - Smoke test Flask: `python ml/api/test_predict.py`
+  - Debug feature payload: `GET /api/features`
+  - Prediction route: `POST /api/predict` (note: `GET` returns 405)
 
 ## License
 
