@@ -186,8 +186,7 @@ refresh `ml/model/procrastination_model.joblib` when you change the pipeline.
 │   │   └── procrastination_model.joblib         # Serialized trained model
 │   └── notebooks/                               # Jupyter notebooks
 │       ├── EDA.ipynb                            # Exploratory data analysis notebook
-│       ├── procrastination_model_training.ipynb # Main training notebook
-│       └── Train_From_Feature_Matrix.ipynb      # Alternate training notebook
+│       └──Model_Training.ipynb                  # Main training notebook
 ├── prisma/                                      # Prisma ORM/database assets
 │   ├── date_references_seed.xlsx                # Optional: university IDs for seed (Excel)
 │   ├── schema.prisma                            # Database schema
